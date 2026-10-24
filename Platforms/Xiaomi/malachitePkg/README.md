@@ -60,6 +60,17 @@ image is `Mu-malachite.img` (Android boot header v4, kernel = `lz4 -l` of
 BootShim + firmware volume). `fastboot flash boot_a Mu-malachite.img` followed by
 `fastboot --set-active=a` installs it.
 
+## Submodule fixes
+
+`Mu_Basecore` is a submodule, and this build also needs the local changes kept
+as `patches/mu_basecore-malachite.patch`: a timer-frequency fallback when
+`CNTFRQ_EL0` reads zero, UFS pass-through fixes for the MediaTek controller, and
+a few build fixes.  Apply them inside the submodule before building:
+
+```sh
+git -C Mu_Basecore apply ../Platforms/Xiaomi/malachitePkg/patches/mu_basecore-malachite.patch
+```
+
 ## Notes
 
 - LK on this phone only accepts the legacy LZ4 frame (`lz4 -l`) for the kernel,
