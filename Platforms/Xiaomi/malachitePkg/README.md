@@ -13,7 +13,7 @@ loader from the payload appended after the firmware volume.
 
 | Path | Contents |
 | --- | --- |
-| `Platforms/Xiaomi/malachitePkg` | platform DSC/FDF/DEC, memory map, keypad, UFS host controller, a demo application that gives the Boot Manager a boot option |
+| `Platforms/Xiaomi/malachitePkg` | platform DSC/FDF/DEC, memory map, keypad, UFS host controller, a bring-up demo application |
 | `Silicon/MediaTek/MT6878Pkg` | `PlatformSecLib`: the register map and the early helpers SEC needs on this SoC |
 | `Resources/Configs/malachite.toml` | build configuration: addresses, DTB copy, payload copy, LZ4-legacy kernel compression |
 | `BootShim/BootShim.S` | EL and MMU handling, DTB copy, payload copy, the Linux-style kernel header LK expects |
@@ -40,7 +40,7 @@ LK -> boot.img (BootShim + UEFI FV + XNUP payload)
    -> BootShim: mask interrupts, turn the current EL's MMU off, record
       CurrentEL/HCR_EL2/SCTLR for SEC, copy the DTB to 0x41680000, copy the
       payload to 0x100000000, enter the firmware volume at 0x41000000
-   -> UEFI: display, keypad, UFS, Boot Manager
+   -> UEFI: display, keypad, UFS; then straight into the XNU loader (no boot menu)
    -> BootManagerLib/XnuLoader.c: start loader.efi from the payload
    -> xnuloader (HackiOS): load XNU, build the device tree and boot_args, jump
 ```
