@@ -15,6 +15,7 @@
 [Sources]
   BootManager.c
   KeyCallback.c
+  XnuLoader.c
 
 [Packages]
   MdePkg/MdePkg.dec
@@ -27,6 +28,9 @@
 [LibraryClasses]
   PcdLib
   DebugLib
+  BaseLib
+  BaseMemoryLib
+  IoLib
   AcpiTableUpdateLib
   DeviceBootManagerLib
   UefiRuntimeServicesTableLib

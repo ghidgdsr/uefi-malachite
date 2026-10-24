@@ -1,0 +1,26 @@
+##
+#  Minimal UEFI application for the malachite bring-up.
+#
+#  Copyright (c) 2024, the UniXNU contributors.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = DemoApp
+  FILE_GUID                      = 7E3B1C5A-9D24-4F8B-B6E2-0A5C9D3F1E77
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  DemoApp.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  DebugLib
+  UefiApplicationEntryPoint
+  UefiBootServicesTableLib
+  UefiLib

@@ -1,0 +1,31 @@
+#
+# UEFI FD Configs
+#
+[uefi_fd]
+base = 0x41000000
+size = 0x200000
+
+#
+# Boot Shim
+#
+[boot_shim]
+requires_kernel_header = true
+dtb_copy_addr          = 0x41680000
+dtb_copy_size          = 0x100000
+# HackiOS: copy the "XNUP" container appended after the FD to this address
+payload_base           = 0x100000000
+
+#
+# Android Boot Image Kernel Configs
+#
+[boot_image_kernel]
+kernel_compression = "lz4"
+append_dtb         = false
+
+#
+# Android Boot Image Configs
+#
+[boot_image]
+header_version = 4
+cmdline        = "bootopt=64S3,32N2,64N2"
+ramdisk        = "Resources/ramdisk-empty"

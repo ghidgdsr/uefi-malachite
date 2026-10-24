@@ -188,12 +188,22 @@ def compile_boot_shim (boot_shim_config: dict, fd_config: dict) -> bool:
     # Get Kernel Header Flag
     requires_kernel_header = boot_shim_config.get ("requires_kernel_header", False)
 
+    # Get DTB Copy Details (0 disables the copy)
+    dtb_copy_addr = boot_shim_config.get ("dtb_copy_addr", 0)
+    dtb_copy_size = boot_shim_config.get ("dtb_copy_size", 0)
+
+    # Get Payload Copy Address (0 disables the copy)
+    payload_base = boot_shim_config.get ("payload_base", 0)
+
     # Set Compile Command
     cmd = [
         "make",
         f"REQUIRES_KERNEL_HEADER={int (requires_kernel_header)}",
         f"FD_BASE={fd_base}",
-        f"FD_SIZE={fd_size}"
+        f"FD_SIZE={fd_size}",
+        f"DTB_COPY_ADDR={hex (dtb_copy_addr)}",
+        f"DTB_COPY_SIZE={hex (dtb_copy_size)}",
+        f"PAYLOAD_BASE={hex (payload_base)}"
     ]
 
     # Compile Boot Shim
@@ -286,6 +296,22 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
                 logger.error (e)
                 return False
 
+        # Use LZ4 legacy-frame Compression (what MediaTek LK expects)
+        case "lz4":
+            try:
+                result = subprocess.run (
+                    ["lz4", "-l", "-f", str (uefi_fd), str (uefi_fd_gz)],
+                    stdout = subprocess.DEVNULL,
+                    stderr = subprocess.DEVNULL
+                )
+                if result.returncode != 0:
+                    logger.error ("Failed to LZ4-Compress UEFI FD File!")
+                    return False
+            except Exception as e:
+                logger.error ("Failed to LZ4-Compress UEFI FD File!")
+                logger.error (e)
+                return False
+
         # Use No Compression
         case "none":
             pass
@@ -324,11 +350,14 @@ def create_android_boot_img (ctx: BuildContext, image_kernel_config: dict, image
     # Set Output File Name
     output_file_name = f"Mu-{ctx.device}-{ctx.device_model}.img" if add_output_suffix else f"Mu-{ctx.device}.img"
 
+    # Set Ramdisk Path (a device may need an empty ramdisk, like the stock image)
+    ramdisk_path = image_config.get ("ramdisk", "Resources/ramdisk")
+
     # Set Base mkbootimg Command
     cmd = [
         sys.executable, str (mkbootimg),
         "--kernel",     str (android_kernel),
-        "--ramdisk",    "Resources/ramdisk",
+        "--ramdisk",    str (ramdisk_path),
         "-o",           output_file_name
     ]
 

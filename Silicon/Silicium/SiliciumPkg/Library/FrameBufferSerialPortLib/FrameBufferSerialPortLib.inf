@@ -25,6 +25,7 @@
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferWidth
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferHeight
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferColorDepth
+  gSiliciumPkgTokenSpaceGuid.PcdFrameBufferStride
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferDelay
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferFontScale
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferFreezeWhenFull

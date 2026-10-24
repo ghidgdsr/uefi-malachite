@@ -28,6 +28,7 @@
   ArmMmuLib
   MemoryAllocationLib
   MemoryMapLib
+  MemoryMapHelperLib
   DebugLib
   HobLib
 

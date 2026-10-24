@@ -24,11 +24,17 @@
   MemoryMapHelperLib
   BaseMemoryLib
   PcdLib
+  HobLib
+  FdtLib
+
+[Guids]
+  gSiliciumEntryArgHobGuid
 
 [FixedPcd]
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferWidth
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferHeight
   gSiliciumPkgTokenSpaceGuid.PcdFrameBufferColorDepth
+  gSiliciumPkgTokenSpaceGuid.PcdFrameBufferStride
 
 [Protocols]
   gEfiGraphicsOutputProtocolGuid

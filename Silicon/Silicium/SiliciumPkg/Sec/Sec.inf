@@ -36,6 +36,7 @@
   DebugLib
   DebugAgentLib
   BaseMemoryLib
+  MemoryAllocationLib
   PlatformSecLib
   PrePiHobListPointerLib
   CacheMaintenanceLib

@@ -5,6 +5,8 @@
 #include <Library/MemoryMapHelperLib.h>
 #include <Library/BaseMemoryLib.h>
 #include <Library/PcdLib.h>
+#include <Library/HobLib.h>
+#include <Library/FdtLib.h>
 
 #include <Configuration/BootDevices.h>
 
@@ -84,16 +86,94 @@ STATIC EFI_GRAPHICS_OUTPUT_PROTOCOL mFrameBuffer = {
   NULL
 };
 
+//
+// /chosen/atag,videolfb as written by the MediaTek bootloader.
+// fb_base is the physical address the display controller is scanning out.
+//
+typedef struct {
+  UINT64    FbBase;
+  UINT32    IsLcmFound;
+  UINT32    Fps;
+  UINT32    Vram;
+} MTK_VIDEOLFB_TAG;
+
+STATIC
+BOOLEAN
+GetFrameBufferFromDtb (
+  OUT EFI_PHYSICAL_ADDRESS *BaseAddress,
+  OUT UINT32               *VramSize
+  )
+{
+  EFI_HOB_GUID_TYPE *Hob;
+  UINT64            Dtb;
+  INT32             ChosenOffset;
+  INT32             Length;
+  CONST VOID        *Property;
+  MTK_VIDEOLFB_TAG  Tag;
+
+  // SEC saved the first argument (the DT address) in a HOB
+  Hob = GetFirstGuidHob (&gSiliciumEntryArgHobGuid);
+  if (Hob == NULL || GET_GUID_HOB_DATA_SIZE (Hob) < sizeof (UINT64)) {
+    return FALSE;
+  }
+
+  Dtb = *(UINT64 *)GET_GUID_HOB_DATA (Hob);
+  if (Dtb == 0) {
+    return FALSE;
+  }
+
+  // Read /chosen/atag,videolfb
+  ChosenOffset = FdtPathOffset ((CONST VOID *)(UINTN)Dtb, "/chosen");
+  if (ChosenOffset < 0) {
+    return FALSE;
+  }
+
+  Property = FdtGetProp ((CONST VOID *)(UINTN)Dtb, ChosenOffset, "atag,videolfb", &Length);
+  // The tag is at least fb_base (8) + islcmfound/fps/vram (12) bytes; lcmname
+  // is optional. Copy the fixed part only.
+  if (Property == NULL || Length < 20) {
+    return FALSE;
+  }
+
+  CopyMem (&Tag, Property, 20);
+  if (Tag.FbBase == 0) {
+    return FALSE;
+  }
+
+  *BaseAddress = Tag.FbBase;
+  *VramSize    = Tag.Vram;
+
+  DEBUG ((EFI_D_WARN, "SimpleFb: DTB fb_base=0x%lx vram=0x%x\n", Tag.FbBase, Tag.Vram));
+
+  return TRUE;
+}
+
 EFI_STATUS
 GetFrameBufferInfos (
   OUT EFI_PHYSICAL_ADDRESS *BaseAddress,
   OUT UINT32               *Width,
   OUT UINT32               *Height,
-  OUT UINT32               *ColorDepth)
+  OUT UINT32               *ColorDepth,
+  OUT UINT32               *Stride)
 {
   EFI_MEMORY_REGION_DESCRIPTOR FrameBufferRegion;
+  UINT32                       VramSize;
+
+  // Prefer the framebuffer the bootloader handed over in the DT
+  if (GetFrameBufferFromDtb (BaseAddress, &VramSize)) {
+    *Width      = FixedPcdGet32 (PcdFrameBufferWidth);
+    *Height     = FixedPcdGet32 (PcdFrameBufferHeight);
+    *ColorDepth = FixedPcdGet32 (PcdFrameBufferColorDepth);
+    *Stride     = FixedPcdGet32 (PcdFrameBufferStride);
+    if (*Stride == 0) {
+      *Stride = *Width;
+    }
+
+    return EFI_SUCCESS;
+  }
 
   // Locate "Display Reserved" Memory Region
+  ZeroMem (&FrameBufferRegion, sizeof (FrameBufferRegion));
   LocateMemoryRegionByName ("Display Reserved", &FrameBufferRegion);
   LocateMemoryRegionByName ("Display_Reserved", &FrameBufferRegion);
 
@@ -107,6 +187,10 @@ GetFrameBufferInfos (
   *Width      = FixedPcdGet32 (PcdFrameBufferWidth);
   *Height     = FixedPcdGet32 (PcdFrameBufferHeight);
   *ColorDepth = FixedPcdGet32 (PcdFrameBufferColorDepth);
+  *Stride     = FixedPcdGet32 (PcdFrameBufferStride);
+  if (*Stride == 0) {
+    *Stride = *Width;
+  }
 
   // Verify Frame Buffer Resolution
   if (*Width < 640 || *Height < 475) {
@@ -155,7 +239,8 @@ SetFrameBufferModeDetails (
   IN EFI_PHYSICAL_ADDRESS BaseAddress,
   IN UINT32               Width,
   IN UINT32               Height,
-  IN UINT32               ColorDepth)
+  IN UINT32               ColorDepth,
+  IN UINT32               Stride)
 {
   // Set Info Size
   mFrameBuffer.Mode->SizeOfInfo = sizeof (EFI_GRAPHICS_OUTPUT_MODE_INFORMATION);
@@ -166,7 +251,7 @@ SetFrameBufferModeDetails (
 
   // Set Frame Buffer Range
   mFrameBuffer.Mode->FrameBufferBase = BaseAddress;
-  mFrameBuffer.Mode->FrameBufferSize = Width * Height * (ColorDepth / 8);
+  mFrameBuffer.Mode->FrameBufferSize = Stride * Height * (ColorDepth / 8);
 
   // Set Mode Info Version
   mFrameBuffer.Mode->Info->Version = 0;
@@ -174,7 +259,7 @@ SetFrameBufferModeDetails (
   // Set Frame Buffer Infos
   mFrameBuffer.Mode->Info->HorizontalResolution = Width;
   mFrameBuffer.Mode->Info->VerticalResolution   = Height;
-  mFrameBuffer.Mode->Info->PixelsPerScanLine    = Width;
+  mFrameBuffer.Mode->Info->PixelsPerScanLine    = Stride;
 
   // Set Pixel Format
   switch (ColorDepth) {
@@ -264,9 +349,10 @@ RegisterFrameBuffer (
   UINT32               Width;
   UINT32               Height;
   UINT32               ColorDepth;
+  UINT32               Stride;
 
   // Get Frame Buffer Infos
-  Status = GetFrameBufferInfos (&BaseAddress, &Width, &Height, &ColorDepth);
+  Status = GetFrameBufferInfos (&BaseAddress, &Width, &Height, &ColorDepth, &Stride);
   if (EFI_ERROR (Status)) {
     return Status;
   }
@@ -278,7 +364,7 @@ RegisterFrameBuffer (
   }
 
   // Set Frame Buffer Mode Details
-  Status = SetFrameBufferModeDetails (BaseAddress, Width, Height, ColorDepth);
+  Status = SetFrameBufferModeDetails (BaseAddress, Width, Height, ColorDepth, Stride);
   if (EFI_ERROR (Status)) {
     goto cleanup;
   }

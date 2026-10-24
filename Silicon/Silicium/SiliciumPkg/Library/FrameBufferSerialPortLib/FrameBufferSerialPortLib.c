@@ -11,6 +11,75 @@
 
 FB_GEOMETRY  mFbGeometry;
 
+//
+// Debug log ring (malachite bring-up): every byte DEBUG sends here is also
+// appended to a fixed area of RAM inside the platform's reserved hole at
+// 0x41400000. The loader log printed at the end clears the panel, so without
+// this copy a driver's DEBUG messages (UfsPassThru, ScsiDisk, ...) would be
+// lost; XnuLoader prints the tail of the ring after the loader returns.
+//
+// The hole is mapped by MemoryMapLib (see "RAM Hole"): reserved, not
+// allocatable, so nothing else in the firmware uses it.
+//
+#define DEBUG_LOG_BASE   0x41400000ULL
+#define DEBUG_LOG_MAGIC  0x47424455u   // "UDBG"
+#define DEBUG_LOG_SIZE   0x00080000u   // 512 KiB of messages
+
+//
+// Calling cards, clear of the ring: SerialPortInitialize is also called by
+// late DXE drivers (the status-code handler, SerialDxe), so it must not clear
+// the ring -- BootShim clears it once per boot instead. These words say how
+// often it was called, from where, and how often the ring had to be lazily
+// initialised, which is what a log that starts too late looks like.
+//
+#define DEBUG_LOG_MARK   0x414FF000ULL
+
+typedef struct {
+  UINT32  Magic;
+  UINT32  Head;
+  UINT32  Total;
+  UINT32  Wrapped;
+  UINT8   Data[DEBUG_LOG_SIZE];
+} DEBUG_LOG_RING;
+
+STATIC
+VOID
+DebugLogAppend (
+  IN CONST UINT8  *Buffer,
+  IN UINTN         NumberOfBytes
+  )
+{
+  volatile DEBUG_LOG_RING  *Ring;
+  UINT32                    Head;
+
+  Ring = (volatile DEBUG_LOG_RING *)(UINTN)DEBUG_LOG_BASE;
+
+  if (Ring->Magic != DEBUG_LOG_MAGIC) {
+    volatile UINT32  *Mark;
+
+    Mark    = (volatile UINT32 *)(UINTN)DEBUG_LOG_MARK;
+    Mark[2] = Mark[2] + 1;
+
+    Ring->Head    = 0;
+    Ring->Total   = 0;
+    Ring->Wrapped = 0;
+    Ring->Magic   = DEBUG_LOG_MAGIC;
+  }
+
+  Head = Ring->Head;
+  for (UINTN i = 0; i < NumberOfBytes; i++) {
+    Ring->Data[Head] = Buffer[i];
+    Head++;
+    if (Head == DEBUG_LOG_SIZE) {
+      Head          = 0;
+      Ring->Wrapped = 1;
+    }
+  }
+
+  Ring->Head   = Head;
+  Ring->Total += (UINT32)NumberOfBytes;
+}
+
 inline
 STATIC
 UINT8*
@@ -278,10 +347,16 @@ LoadGeometry (
   CONST volatile FB_HANDOFF *Handoff;
 
   // Build-time Default
-  mFbGeometry.Base       = (UINTN)FbBase;
-  mFbGeometry.Width      = FixedPcdGet32 (PcdFrameBufferWidth);
-  mFbGeometry.Height     = FixedPcdGet32 (PcdFrameBufferHeight);
-  mFbGeometry.PitchBytes = mFbGeometry.Width * FB_BPP;
+  mFbGeometry.Base   = (UINTN)FbBase;
+  mFbGeometry.Width  = FixedPcdGet32 (PcdFrameBufferWidth);
+  mFbGeometry.Height = FixedPcdGet32 (PcdFrameBufferHeight);
+
+  // The scanout pitch is often padded past the visible width (MediaTek pads
+  // to 32 pixels), so use the stride when the platform provides one; drawing
+  // with Width * BPP would shear every line.
+  mFbGeometry.PitchBytes = (FixedPcdGet32 (PcdFrameBufferStride) != 0) ?
+                           (FixedPcdGet32 (PcdFrameBufferStride) * FB_BPP) :
+                           (mFbGeometry.Width * FB_BPP);
 
   // Handed-off Geometry, valid only once its Magic is set
   Handoff = (CONST volatile FB_HANDOFF *)(UINTN)(FbBase + FbLength - FB_HANDOFF_OFFSET);
@@ -302,6 +377,9 @@ SerialPortWrite (
   EFI_STATUS           Status;
   EFI_PHYSICAL_ADDRESS FbBase;
   UINT64               FbLength;
+
+  // Keep a copy for XnuLoader even when the panel cannot be found
+  DebugLogAppend (Buffer, NumberOfBytes);
 
   // Get Frame Buffer Memory
   Status = GetFrameBufferMemory (&FbBase, &FbLength);
@@ -383,5 +461,17 @@ EFI_STATUS
 EFIAPI
 SerialPortInitialize ()
 {
+  volatile UINT32  *Mark;
+
+  //
+  // Do not clear the ring here: this routine is called from SEC and again by
+  // late DXE drivers, and clearing it at that point would throw away exactly
+  // the messages a failing driver printed before them. BootShim clears the
+  // ring once per boot instead. Leave the caller's address as evidence.
+  //
+  Mark    = (volatile UINT32 *)(UINTN)DEBUG_LOG_MARK;
+  Mark[0] = Mark[0] + 1;
+  Mark[1] = (UINT32)(UINTN)__builtin_return_address (0);
+
   return EFI_SUCCESS;
 }

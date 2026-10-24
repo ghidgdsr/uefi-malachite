@@ -1,0 +1,41 @@
+## @file
+#  MediaTek MT6878 UFS host controller (MMIO) for the generic EDK2 UFS stack.
+#
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = UfsMtkDxe
+  FILE_GUID                      = 5B6E6A10-9F1C-4B7D-8E2A-3C4D5E6F7A80
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = UfsMtkDxeEntry
+
+[Sources]
+  UfsMtkDxe.c
+  UfsMtkDxe.h
+
+[Packages]
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+
+[LibraryClasses]
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+  DebugLib
+  BaseLib
+  BaseMemoryLib
+  MemoryAllocationLib
+  DevicePathLib
+  IoLib
+  CacheMaintenanceLib
+  ArmSmcLib
+
+[Protocols]
+  gEfiDevicePathProtocolGuid
+  gEdkiiUfsHostControllerProtocolGuid
+  gEdkiiUfsHcPlatformProtocolGuid
+
+[Depex]
+  TRUE
